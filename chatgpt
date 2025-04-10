@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Tikklok</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
+    button { padding: 10px 20px; margin: 5px; font-size: 16px; }
+    #log, #totaal, #sessies { margin-top: 30px; max-width: 800px; margin-left: auto; margin-right: auto; text-align: left; }
+    .info { margin: 5px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    .delete-btn { background: #f44336; color: white; border: none; padding: 4px 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🕒 Tikklok</h1>
+
+  <div>
+    <button onclick="startWork()">Start werk</button>
+    <button onclick="startBreak()">Start pauze</button>
+    <button onclick="endBreak()">Einde pauze</button>
+    <button onclick="stopWork()">Stop werk</button>
+    <button onclick="showAllSessions()">Toon sessies</button>
+    <button onclick="exportCSV()">📁 Exporteer naar CSV</button>
+    <button onclick="clearAllData()">🗑️ Wissen</button>
+  </div>
+
+  <div id="log"></div>
+  <div id="totaal"></div>
+  <div id="sessies"></div>
+
+  <script>
+    let workStart = null;
+    let workEnd = null;
+    let breaks = [];
+    let currentBreakStart = null;
+
+    function formatTime(ms) {
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      return `${h}u ${m}m ${s}s`;
+    }
+
+    function startWork() {
+      workStart = new Date();
+      breaks = [];
+      currentBreakStart = null;
+      workEnd = null;
+      updateLog("Werk gestart om " + workStart.toLocaleTimeString());
+    }
+
+    function startBreak() {
+      if (!workStart) return alert("Je moet eerst starten met werken!");
+      if (currentBreakStart) return alert("Je bent al in pauze!");
+      currentBreakStart = new Date();
+      updateLog("Pauze gestart om " + currentBreakStart.toLocaleTimeString());
+    }
+
+    function endBreak() {
+      if (!currentBreakStart) return alert("Je bent niet in pauze!");
+      const breakEnd = new Date();
+      breaks.push({ start: currentBreakStart, end: breakEnd });
+      updateLog("Pauze geëindigd om " + breakEnd.toLocaleTimeString());
+      currentBreakStart = null;
+    }
+
+    function stopWork() {
+      if (!workStart) return alert("Je bent nog niet begonnen met werken!");
+      workEnd = new Date();
+      if (currentBreakStart) {
+        breaks.push({ start: currentBreakStart, end: workEnd });
+        currentBreakStart = null;
+      }
+      const worked = workEnd - workStart;
+      const pauseTotal = breaks.reduce((sum, b) => sum + (b.end - b.start), 0);
+      const netto = worked - pauseTotal;
+
+      updateLog(`Werk gestopt om ${workEnd.toLocaleTimeString()}`);
+      updateLog(`<b>Totale werktijd:</b> ${formatTime(worked)}`);
+      updateLog(`<b>Totaal pauze:</b> ${formatTime(pauseTotal)}`);
+      updateLog(`<b>Netto gewerkt:</b> ${formatTime(netto)}`);
+
+      saveSession({
+        start: workStart.toISOString(),
+        end: workEnd.toISOString(),
+        breaks: breaks.map(b => ({ start: b.start.toISOString(), end: b.end.toISOString() })),
+        netto: netto
+      });
+
+      showTotals();
+    }
+
+    function updateLog(text) {
+      const log = document.getElementById("log");
+      const p = document.createElement("p");
+      p.className = "info";
+      p.innerHTML = text;
+      log.appendChild(p);
+    }
+
+    function saveSession(session) {
+      const dateKey = session.start.split("T")[0];
+      let data = JSON.parse(localStorage.getItem("tikklok") || "{}");
+      if (!data[dateKey]) data[dateKey] = [];
+      data[dateKey].push(session);
+      localStorage.setItem("tikklok", JSON.stringify(data));
+    }
+
+    function deleteSession(date, index) {
+      if (!confirm("Weet je zeker dat je deze sessie wilt verwijderen?")) return;
+      let data = JSON.parse(localStorage.getItem("tikklok") || "{}");
+      data[date].splice(index, 1);
+      if (data[date].length === 0) delete data[date];
+      localStorage.setItem("tikklok", JSON.stringify(data));
+      showAllSessions();
+      showTotals();
+    }
+
+    function clearAllData() {
+      if (confirm("Weet je zeker dat je alle data wilt wissen?")) {
+        localStorage.removeItem("tikklok");
+        document.getElementById("sessies").innerHTML = "";
+        document.getElementById("totaal").innerHTML = "";
+        document.getElementById("log").innerHTML = "";
+        alert("Alle data is gewist.");
+      }
+    }
+
+    function showTotals() {
+      const totaalDiv = document.getElementById("totaal");
+      totaalDiv.innerHTML = "<h2>📊 Overzicht</h2>";
+
+      const data = JSON.parse(localStorage.getItem("tikklok") || "{}");
+      const now = new Date();
+      const todayKey = now.toISOString().split("T")[0];
+
+      let today = 0;
+      let week = 0;
+      let month = 0;
+
+      for (const [date, sessions] of Object.entries(data)) {
+        const d = new Date(date);
+        const total = sessions.reduce((a, b) => a + b.netto, 0);
+
+        if (date === todayKey) today += total;
+
+        const sameMonth = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+
+        if (sameMonth) month += total;
+        if (d >= startOfWeek && d <= now) week += total;
+      }
+
+      totaalDiv.innerHTML += `<p><b>Vandaag:</b> ${formatTime(today)}</p>`;
+      totaalDiv.innerHTML += `<p><b>Deze week:</b> ${formatTime(week)}</p>`;
+      totaalDiv.innerHTML += `<p><b>Deze maand:</b> ${formatTime(month)}</p>`;
+    }
+
+    function showAllSessions() {
+      const sessiesDiv = document.getElementById("sessies");
+      sessiesDiv.innerHTML = "<h2>📅 Alle sessies</h2>";
+      const data = JSON.parse(localStorage.getItem("tikklok") || "{}");
+      let html = "";
+
+      Object.entries(data).sort().reverse().forEach(([date, sessions]) => {
+        html += `<h3>${date}</h3><table><tr><th>Start</th><th>Stop</th><th>Pauzes</th><th>Netto</th><th>Actie</th></tr>`;
+        sessions.forEach((s, i) => {
+          const pauseText = s.breaks.map(b => {
+            const st = new Date(b.start).toLocaleTimeString();
+            const en = new Date(b.end).toLocaleTimeString();
+            const dur = formatTime(new Date(b.end) - new Date(b.start));
+            return `${st}-${en} (${dur})`;
+          }).join("<br>");
+
+          html += `<tr>
+            <td>${new Date(s.start).toLocaleTimeString()}</td>
+            <td>${new Date(s.end).toLocaleTimeString()}</td>
+            <td>${pauseText || '-'}</td>
+            <td>${formatTime(s.netto)}</td>
+            <td><button class="delete-btn" onclick="deleteSession('${date}', ${i})">🗑️ Verwijder</button></td>
+          </tr>`;
+        });
+        html += `</table>`;
+      });
+      sessiesDiv.innerHTML += html;
+    }
+
+    function exportCSV() {
+      const data = JSON.parse(localStorage.getItem("tikklok") || "{}");
+      let csv = "Datum,Start,Stop,Pauzes,Netto\n";
+
+      for (const [date, sessions] of Object.entries(data)) {
+        sessions.forEach(s => {
+          const pauseText = s.breaks.map(b => {
+            const st = new Date(b.start).toLocaleTimeString();
+            const en = new Date(b.end).toLocaleTimeString();
+            const dur = formatTime(new Date(b.end) - new Date(b.start));
+            return `${st}-${en} (${dur})`;
+          }).join(" | ");
+
+          csv += `${date},${new Date(s.start).toLocaleTimeString()},${new Date(s.end).toLocaleTimeString()},"${pauseText}",${formatTime(s.netto)}\n`;
+        });
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tikklok_export.csv";
+      a.click();
+    }
+
+    showTotals();
+  </script>
+</body>
+</html>
