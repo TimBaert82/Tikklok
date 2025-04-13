@@ -80,12 +80,8 @@
   </div>
 
   <script>
-    let workTime = 0, pauseTime = 0, weekTime = 0;
-    let workInterval, pauseInterval;
-    let onPause = false;
     const today = new Date();
     const todayKey = today.toISOString().slice(0, 10);
-
     const getWeekNumber = (d) => {
       d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
       const dayNum = d.getUTCDay() || 7;
@@ -94,10 +90,6 @@
       return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
     };
 
-    const weekNumber = getWeekNumber(today);
-    const weekData = JSON.parse(localStorage.getItem('weekData') || '{}');
-    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0, week: weekNumber };
-
     const formatTime = (seconds) => {
       const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
       const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
@@ -105,10 +97,26 @@
       return `${h}:${m}:${s}`;
     };
 
+    const loadData = () => JSON.parse(localStorage.getItem('weekData') || '{}');
+    const saveData = (data) => localStorage.setItem('weekData', JSON.stringify(data));
+
+    let weekData = loadData();
+    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0, week: getWeekNumber(today) };
+
+    let workStart = parseInt(localStorage.getItem('workStart')) || null;
+    let pauseStart = parseInt(localStorage.getItem('pauseStart')) || null;
+    let onPause = !!pauseStart;
+    let workTime = weekData[todayKey].work;
+    let pauseTime = weekData[todayKey].pause;
+    let weekTime = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
+
     const updateTimers = () => {
-      document.getElementById("workTimer").textContent = formatTime(workTime);
-      document.getElementById("pauseTimer").textContent = formatTime(pauseTime);
-      document.getElementById("weekTimer").textContent = formatTime(weekTime);
+      const now = Date.now();
+      const liveWork = workStart ? Math.floor((now - workStart) / 1000) : 0;
+      const livePause = pauseStart ? Math.floor((now - pauseStart) / 1000) : 0;
+      document.getElementById("workTimer").textContent = formatTime(workTime + liveWork);
+      document.getElementById("pauseTimer").textContent = formatTime(pauseTime + livePause);
+      document.getElementById("weekTimer").textContent = formatTime(weekTime + liveWork);
     };
 
     const updateWeekOverview = () => {
@@ -122,40 +130,45 @@
       });
     };
 
+    setInterval(updateTimers, 1000);
+    updateWeekOverview();
+
     document.getElementById("startBtn").onclick = () => {
-      if (!workInterval) {
-        workInterval = setInterval(() => {
-          workTime++;
-          weekTime++;
-          weekData[todayKey].work++;
-          localStorage.setItem('weekData', JSON.stringify(weekData));
-          updateTimers();
-          updateWeekOverview();
-        }, 1000);
+      if (!workStart) {
+        workStart = Date.now();
+        localStorage.setItem('workStart', workStart);
       }
     };
 
     document.getElementById("pauseBtn").onclick = (e) => {
       const btn = e.target;
-      if (!onPause) {
+      if (!pauseStart) {
+        pauseStart = Date.now();
+        localStorage.setItem('pauseStart', pauseStart);
         onPause = true;
         btn.textContent = "Hervat";
-        pauseInterval = setInterval(() => {
-          pauseTime++;
-          weekData[todayKey].pause++;
-          localStorage.setItem('weekData', JSON.stringify(weekData));
-          updateTimers();
-        }, 1000);
       } else {
+        const elapsed = Math.floor((Date.now() - pauseStart) / 1000);
+        pauseTime += elapsed;
+        weekData[todayKey].pause = pauseTime;
+        pauseStart = null;
+        localStorage.removeItem('pauseStart');
         onPause = false;
         btn.textContent = "Pauze";
-        clearInterval(pauseInterval);
+        saveData(weekData);
       }
     };
 
     document.getElementById("stopBtn").onclick = () => {
-      clearInterval(workInterval);
-      workInterval = null;
+      if (workStart) {
+        const elapsed = Math.floor((Date.now() - workStart) / 1000);
+        workTime += elapsed;
+        weekData[todayKey].work = workTime;
+        workStart = null;
+        localStorage.removeItem('workStart');
+        saveData(weekData);
+        updateWeekOverview();
+      }
     };
 
     document.getElementById("pdfBtn").onclick = () => {
@@ -195,12 +208,6 @@
 
       doc.save("tikklok_overzicht.pdf");
     };
-
-    workTime = weekData[todayKey].work;
-    pauseTime = weekData[todayKey].pause;
-    weekTime = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
-    updateTimers();
-    updateWeekOverview();
   </script>
 </body>
 </html>
