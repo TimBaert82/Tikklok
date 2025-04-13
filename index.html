@@ -79,6 +79,12 @@
     <ul id="weekOverview"></ul>
   </div>
 
+  <div>
+    <button id="exportBtn">⬇️ Back-up maken</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" />
+    <button onclick="document.getElementById('importFile').click()">⬆️ Back-up importeren</button>
+  </div>
+
   <script>
     const today = new Date();
     const todayKey = today.toISOString().slice(0, 10);
@@ -99,6 +105,15 @@
 
     const loadData = () => JSON.parse(localStorage.getItem('weekData') || '{}');
     const saveData = (data) => localStorage.setItem('weekData', JSON.stringify(data));
+    const downloadJSON = (data, filename) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
 
     let weekData = loadData();
     if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0, week: getWeekNumber(today) };
@@ -168,8 +183,32 @@
         localStorage.removeItem('workStart');
         saveData(weekData);
         updateWeekOverview();
+        downloadJSON(weekData, `tikklok-backup-${todayKey}.json`); // automatische backup
       }
     };
+
+    document.getElementById("exportBtn").onclick = () => {
+      downloadJSON(weekData, `tikklok-backup-${todayKey}.json`);
+    };
+
+    document.getElementById("importFile").addEventListener("change", function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          weekData = data;
+          saveData(data);
+          workTime = data[todayKey]?.work || 0;
+          pauseTime = data[todayKey]?.pause || 0;
+          updateWeekOverview();
+        } catch (err) {
+          alert("Ongeldig JSON-bestand");
+        }
+      };
+      reader.readAsText(file);
+    });
 
     document.getElementById("pdfBtn").onclick = () => {
       const { jsPDF } = window.jspdf;
