@@ -165,22 +165,34 @@
       doc.setFontSize(14);
       doc.text("Overzicht per dag:", 10, y);
       y += 10;
+
       const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
+      const groupedByWeek = {};
       sortedDays.forEach(([date, { work, pause, week }]) => {
-        doc.setFontSize(12);
-        doc.text(`Week ${week} – ${date}`, 10, y);
-        y += 7;
-        doc.text(`  Gewerkt: ${formatTime(work)}`, 10, y);
-        y += 7;
-        doc.text(`  Pauze:   ${formatTime(pause)}`, 10, y);
-        y += 10;
+        if (!groupedByWeek[week]) groupedByWeek[week] = [];
+        groupedByWeek[week].push({ date, work, pause });
       });
-      doc.setFontSize(14);
-      doc.text("Totaal gewerkt deze week:", 10, y);
-      y += 10;
-      const totalWork = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
-      doc.setFontSize(12);
-      doc.text(`  ${formatTime(totalWork)}`, 10, y);
+
+      for (const [week, entries] of Object.entries(groupedByWeek)) {
+        doc.setFontSize(13);
+        doc.text(`Week ${week}`, 10, y);
+        y += 8;
+        let weekTotal = 0;
+        entries.forEach(({ date, work, pause }) => {
+          doc.setFontSize(12);
+          doc.text(`  ${date}`, 10, y);
+          y += 6;
+          doc.text(`    Gewerkt: ${formatTime(work)}`, 10, y);
+          y += 6;
+          doc.text(`    Pauze:   ${formatTime(pause)}`, 10, y);
+          y += 8;
+          weekTotal += work;
+        });
+        doc.setFontSize(12);
+        doc.text(`  Totaal gewerkt in week ${week}: ${formatTime(weekTotal)}`, 10, y);
+        y += 12;
+      }
+
       doc.save("tikklok_overzicht.pdf");
     };
 
