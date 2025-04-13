@@ -214,9 +214,6 @@
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       let y = 10;
-      doc.setFontSize(14);
-      doc.text("Overzicht per dag:", 10, y);
-      y += 10;
 
       const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
       const groupedByWeek = {};
@@ -225,27 +222,35 @@
         groupedByWeek[week].push({ date, work, pause });
       });
 
+      doc.setFontSize(16);
+      doc.text("Weekoverzicht", 10, y);
+      y += 10;
+
       for (const [week, entries] of Object.entries(groupedByWeek)) {
-        doc.setFontSize(13);
+        doc.setFontSize(14);
+        doc.setTextColor(40, 40, 120);
         doc.text(`Week ${week}`, 10, y);
         y += 8;
+
+        doc.setFontSize(12);
+        doc.setTextColor(0);
         let weekTotal = 0;
-        entries.forEach(({ date, work, pause }) => {
-          doc.setFontSize(12);
-          doc.text(`  ${date}`, 10, y);
+        entries.forEach(({ date, work }) => {
+          doc.text(`${date}: ${formatTime(work)}`, 20, y);
           y += 6;
-          doc.text(`    Gewerkt: ${formatTime(work)}`, 10, y);
-          y += 6;
-          doc.text(`    Pauze:   ${formatTime(pause)}`, 10, y);
-          y += 8;
           weekTotal += work;
         });
         doc.setFontSize(12);
-        doc.text(`  Totaal gewerkt in week ${week}: ${formatTime(weekTotal)}`, 10, y);
+        doc.setTextColor(0, 100, 0);
+        doc.text(`Totaal week ${week}: ${formatTime(weekTotal)}`, 20, y);
         y += 12;
+        if (y > 270) {
+          doc.addPage();
+          y = 10;
+        }
       }
 
-      doc.save("tikklok_overzicht.pdf");
+      doc.save("tikklok_weekoverzicht.pdf");
     };
   </script>
 </body>
