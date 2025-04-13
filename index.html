@@ -49,13 +49,17 @@
       color: #2c7be5;
       margin-bottom: 10px;
     }
-    .week-overview ul {
-      list-style: none;
-      padding: 0;
-    }
     .week-overview li {
       padding: 4px 0;
       border-bottom: 1px solid #eee;
+    }
+    textarea {
+      width: 100%;
+      margin-top: 5px;
+      border-radius: 6px;
+      padding: 5px;
+      font-size: 0.9em;
+      border: 1px solid #ccc;
     }
   </style>
 </head>
@@ -77,6 +81,8 @@
   <div class="week-overview">
     <h3>Overzicht per week</h3>
     <ul id="weekOverview"></ul>
+    <label for="noteInput">Opmerking vandaag:</label>
+    <textarea id="noteInput" rows="3" placeholder="Typ je opmerking hier..."></textarea>
   </div>
 
   <div>
@@ -106,10 +112,8 @@
     const loadData = () => {
       const data = JSON.parse(localStorage.getItem('weekData') || '{}');
       for (const [date, entry] of Object.entries(data)) {
-        if (!entry.week) {
-          const d = new Date(date);
-          entry.week = getWeekNumber(d);
-        }
+        if (!entry.week) entry.week = getWeekNumber(new Date(date));
+        if (!entry.note) entry.note = "";
       }
       return data;
     };
@@ -126,7 +130,7 @@
     };
 
     let weekData = loadData();
-    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0, week: getWeekNumber(today) };
+    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0, week: getWeekNumber(today), note: "" };
 
     let workStart = parseInt(localStorage.getItem('workStart')) || null;
     let pauseStart = parseInt(localStorage.getItem('pauseStart')) || null;
@@ -134,6 +138,13 @@
     let workTime = weekData[todayKey].work;
     let pauseTime = weekData[todayKey].pause;
     let weekTime = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
+
+    const noteInput = document.getElementById("noteInput");
+    noteInput.value = weekData[todayKey].note;
+    noteInput.addEventListener("input", () => {
+      weekData[todayKey].note = noteInput.value;
+      saveData(weekData);
+    });
 
     const updateTimers = () => {
       const now = Date.now();
@@ -148,9 +159,9 @@
       const list = document.getElementById("weekOverview");
       list.innerHTML = '';
       const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
-      sortedDays.forEach(([date, { work, week }]) => {
+      sortedDays.forEach(([date, { work, week, note }]) => {
         const li = document.createElement("li");
-        li.textContent = `Week ${week || getWeekNumber(new Date(date))} – ${date}: ${formatTime(work)}`;
+        li.innerHTML = `<strong>Week ${week}</strong> – ${date}: ${formatTime(work)}<br><em>${note || ''}</em>`;
         list.appendChild(li);
       });
     };
@@ -210,11 +221,13 @@
           const data = JSON.parse(e.target.result);
           for (const [date, entry] of Object.entries(data)) {
             if (!entry.week) entry.week = getWeekNumber(new Date(date));
+            if (!entry.note) entry.note = "";
           }
           weekData = data;
           saveData(data);
           workTime = data[todayKey]?.work || 0;
           pauseTime = data[todayKey]?.pause || 0;
+          noteInput.value = data[todayKey]?.note || "";
           updateWeekOverview();
         } catch (err) {
           alert("Ongeldig JSON-bestand");
@@ -230,10 +243,10 @@
 
       const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
       const groupedByWeek = {};
-      sortedDays.forEach(([date, { work, pause, week }]) => {
+      sortedDays.forEach(([date, { work, pause, week, note }]) => {
         const wk = week || getWeekNumber(new Date(date));
         if (!groupedByWeek[wk]) groupedByWeek[wk] = [];
-        groupedByWeek[wk].push({ date, work, pause });
+        groupedByWeek[wk].push({ date, work, pause, note });
       });
 
       doc.setFontSize(16);
@@ -249,9 +262,17 @@
         doc.setFontSize(12);
         doc.setTextColor(0);
         let weekTotal = 0;
-        entries.forEach(({ date, work }) => {
+        entries.forEach(({ date, work, note }) => {
           doc.text(`${date}: ${formatTime(work)}`, 20, y);
           y += 6;
+          if (note) {
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Opmerking: ${note}`, 22, y);
+            y += 5;
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+          }
           weekTotal += work;
         });
         doc.setFontSize(12);
