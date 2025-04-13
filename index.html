@@ -6,11 +6,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f8fb;
+      color: #333;
       text-align: center;
       padding: 20px;
     }
     h1 {
+      color: #2c7be5;
       margin-bottom: 20px;
     }
     .timers {
@@ -20,12 +23,39 @@
     button {
       font-size: 1em;
       margin: 10px;
-      padding: 10px 20px;
+      padding: 12px 24px;
+      background-color: #2c7be5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #1a65d2;
     }
     .week-overview {
       margin-top: 30px;
       text-align: left;
-      display: inline-block;
+      background-color: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 500px;
+      margin-left: auto;
+      margin-right: auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    .week-overview h3 {
+      color: #2c7be5;
+      margin-bottom: 10px;
+    }
+    .week-overview ul {
+      list-style: none;
+      padding: 0;
+    }
+    .week-overview li {
+      padding: 4px 0;
+      border-bottom: 1px solid #eee;
     }
   </style>
 </head>
@@ -53,9 +83,20 @@
     let workTime = 0, pauseTime = 0, weekTime = 0;
     let workInterval, pauseInterval;
     let onPause = false;
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+
+    const getWeekNumber = (d) => {
+      d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+    };
+
+    const weekNumber = getWeekNumber(today);
     const weekData = JSON.parse(localStorage.getItem('weekData') || '{}');
-    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0 };
+    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0, week: weekNumber };
 
     const formatTime = (seconds) => {
       const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
@@ -73,9 +114,10 @@
     const updateWeekOverview = () => {
       const list = document.getElementById("weekOverview");
       list.innerHTML = '';
-      Object.entries(weekData).forEach(([date, { work }]) => {
+      const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
+      sortedDays.forEach(([date, { work, week }]) => {
         const li = document.createElement("li");
-        li.textContent = `${date}: ${formatTime(work)}`;
+        li.textContent = `Week ${week} – ${date}: ${formatTime(work)}`;
         list.appendChild(li);
       });
     };
@@ -120,20 +162,28 @@
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       let y = 10;
+      doc.setFontSize(14);
       doc.text("Overzicht per dag:", 10, y);
       y += 10;
-      Object.entries(weekData).forEach(([date, { work, pause }]) => {
-        doc.text(`${date} - Gewerkt: ${formatTime(work)}, Pauze: ${formatTime(pause)}`, 10, y);
+      const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
+      sortedDays.forEach(([date, { work, pause, week }]) => {
+        doc.setFontSize(12);
+        doc.text(`Week ${week} – ${date}`, 10, y);
+        y += 7;
+        doc.text(`  Gewerkt: ${formatTime(work)}`, 10, y);
+        y += 7;
+        doc.text(`  Pauze:   ${formatTime(pause)}`, 10, y);
         y += 10;
       });
-      doc.text("\nOverzicht per week:", 10, y);
+      doc.setFontSize(14);
+      doc.text("Totaal gewerkt deze week:", 10, y);
       y += 10;
-      let totalWork = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
-      doc.text(`Totaal gewerkt: ${formatTime(totalWork)}`, 10, y);
+      const totalWork = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
+      doc.setFontSize(12);
+      doc.text(`  ${formatTime(totalWork)}`, 10, y);
       doc.save("tikklok_overzicht.pdf");
     };
 
-    // Initial load
     workTime = weekData[todayKey].work;
     pauseTime = weekData[todayKey].pause;
     weekTime = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
