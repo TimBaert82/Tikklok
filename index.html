@@ -103,7 +103,17 @@
       return `${h}:${m}:${s}`;
     };
 
-    const loadData = () => JSON.parse(localStorage.getItem('weekData') || '{}');
+    const loadData = () => {
+      const data = JSON.parse(localStorage.getItem('weekData') || '{}');
+      for (const [date, entry] of Object.entries(data)) {
+        if (!entry.week) {
+          const d = new Date(date);
+          entry.week = getWeekNumber(d);
+        }
+      }
+      return data;
+    };
+
     const saveData = (data) => localStorage.setItem('weekData', JSON.stringify(data));
     const downloadJSON = (data, filename) => {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -140,7 +150,7 @@
       const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
       sortedDays.forEach(([date, { work, week }]) => {
         const li = document.createElement("li");
-        li.textContent = `Week ${week} – ${date}: ${formatTime(work)}`;
+        li.textContent = `Week ${week || getWeekNumber(new Date(date))} – ${date}: ${formatTime(work)}`;
         list.appendChild(li);
       });
     };
@@ -183,7 +193,7 @@
         localStorage.removeItem('workStart');
         saveData(weekData);
         updateWeekOverview();
-        downloadJSON(weekData, `tikklok-backup-${todayKey}.json`); // automatische backup
+        downloadJSON(weekData, `tikklok-backup-${todayKey}.json`);
       }
     };
 
@@ -198,6 +208,9 @@
       reader.onload = function (e) {
         try {
           const data = JSON.parse(e.target.result);
+          for (const [date, entry] of Object.entries(data)) {
+            if (!entry.week) entry.week = getWeekNumber(new Date(date));
+          }
           weekData = data;
           saveData(data);
           workTime = data[todayKey]?.work || 0;
@@ -218,8 +231,9 @@
       const sortedDays = Object.entries(weekData).sort(([a], [b]) => a.localeCompare(b));
       const groupedByWeek = {};
       sortedDays.forEach(([date, { work, pause, week }]) => {
-        if (!groupedByWeek[week]) groupedByWeek[week] = [];
-        groupedByWeek[week].push({ date, work, pause });
+        const wk = week || getWeekNumber(new Date(date));
+        if (!groupedByWeek[wk]) groupedByWeek[wk] = [];
+        groupedByWeek[wk].push({ date, work, pause });
       });
 
       doc.setFontSize(16);
