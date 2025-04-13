@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Tikklok</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    .timers {
+      font-size: 1.2em;
+      margin: 15px 0;
+    }
+    button {
+      font-size: 1em;
+      margin: 10px;
+      padding: 10px 20px;
+    }
+    .week-overview {
+      margin-top: 30px;
+      text-align: left;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tikklok</h1>
+  <div>
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pauze</button>
+    <button id="stopBtn">Stop</button>
+    <button id="pdfBtn">Genereer PDF</button>
+  </div>
+
+  <div class="timers">
+    <p>Gewerkt vandaag: <span id="workTimer">00:00:00</span></p>
+    <p>Pauze vandaag: <span id="pauseTimer">00:00:00</span></p>
+    <p>Deze week: <span id="weekTimer">00:00:00</span></p>
+  </div>
+
+  <div class="week-overview">
+    <h3>Overzicht per week</h3>
+    <ul id="weekOverview"></ul>
+  </div>
+
+  <script>
+    let workTime = 0, pauseTime = 0, weekTime = 0;
+    let workInterval, pauseInterval;
+    let onPause = false;
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const weekData = JSON.parse(localStorage.getItem('weekData') || '{}');
+    if (!weekData[todayKey]) weekData[todayKey] = { work: 0, pause: 0 };
+
+    const formatTime = (seconds) => {
+      const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+      const s = String(seconds % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    };
+
+    const updateTimers = () => {
+      document.getElementById("workTimer").textContent = formatTime(workTime);
+      document.getElementById("pauseTimer").textContent = formatTime(pauseTime);
+      document.getElementById("weekTimer").textContent = formatTime(weekTime);
+    };
+
+    const updateWeekOverview = () => {
+      const list = document.getElementById("weekOverview");
+      list.innerHTML = '';
+      Object.entries(weekData).forEach(([date, { work }]) => {
+        const li = document.createElement("li");
+        li.textContent = `${date}: ${formatTime(work)}`;
+        list.appendChild(li);
+      });
+    };
+
+    document.getElementById("startBtn").onclick = () => {
+      if (!workInterval) {
+        workInterval = setInterval(() => {
+          workTime++;
+          weekTime++;
+          weekData[todayKey].work++;
+          localStorage.setItem('weekData', JSON.stringify(weekData));
+          updateTimers();
+          updateWeekOverview();
+        }, 1000);
+      }
+    };
+
+    document.getElementById("pauseBtn").onclick = (e) => {
+      const btn = e.target;
+      if (!onPause) {
+        onPause = true;
+        btn.textContent = "Hervat";
+        pauseInterval = setInterval(() => {
+          pauseTime++;
+          weekData[todayKey].pause++;
+          localStorage.setItem('weekData', JSON.stringify(weekData));
+          updateTimers();
+        }, 1000);
+      } else {
+        onPause = false;
+        btn.textContent = "Pauze";
+        clearInterval(pauseInterval);
+      }
+    };
+
+    document.getElementById("stopBtn").onclick = () => {
+      clearInterval(workInterval);
+      workInterval = null;
+    };
+
+    document.getElementById("pdfBtn").onclick = () => {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let y = 10;
+      doc.text("Overzicht per dag:", 10, y);
+      y += 10;
+      Object.entries(weekData).forEach(([date, { work, pause }]) => {
+        doc.text(`${date} - Gewerkt: ${formatTime(work)}, Pauze: ${formatTime(pause)}`, 10, y);
+        y += 10;
+      });
+      doc.text("\nOverzicht per week:", 10, y);
+      y += 10;
+      let totalWork = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
+      doc.text(`Totaal gewerkt: ${formatTime(totalWork)}`, 10, y);
+      doc.save("tikklok_overzicht.pdf");
+    };
+
+    // Initial load
+    workTime = weekData[todayKey].work;
+    pauseTime = weekData[todayKey].pause;
+    weekTime = Object.values(weekData).reduce((sum, d) => sum + d.work, 0);
+    updateTimers();
+    updateWeekOverview();
+  </script>
+</body>
+</html>
